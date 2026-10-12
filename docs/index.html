@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seeker Atlas — CLOCK IN deck</title>
+<style>
+  :root { --bg:#0B0F1A; --card:#151B2B; --mint:#14F195; --violet:#9945FF; --text:#E8ECF4; --muted:#8A94A8; }
+  * { box-sizing:border-box; }
+  html { scroll-snap-type:y mandatory; }
+  body { margin:0; background:var(--bg); color:var(--text); font:18px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  section { min-height:100vh; scroll-snap-align:start; display:flex; flex-direction:column; justify-content:center;
+            padding:48px max(24px, 8vw); border-bottom:1px solid #1E2638; position:relative; }
+  .n { position:absolute; top:24px; right:32px; color:var(--muted); font-size:14px; }
+  h1 { font-size:clamp(40px, 7vw, 84px); letter-spacing:.06em; margin:0; color:var(--mint); font-weight:900; }
+  h2 { font-size:clamp(28px, 4vw, 44px); margin:0 0 24px; }
+  .lead { font-size:clamp(20px, 2.4vw, 28px); color:var(--text); max-width:900px; }
+  .muted { color:var(--muted); }
+  .mint { color:var(--mint); } .violet { color:var(--violet); }
+  .row { display:flex; gap:40px; align-items:center; flex-wrap:wrap; }
+  .row > div { flex:1 1 380px; }
+  .phone { flex:0 0 auto !important; width:min(300px, 80vw); border-radius:28px; border:6px solid #222A3D; overflow:hidden; }
+  .phone img { display:block; width:100%; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
+  .card { background:var(--card); border-radius:16px; padding:20px 22px; }
+  .card b { display:block; color:var(--mint); margin-bottom:6px; font-size:19px; }
+  code, pre { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { background:var(--card); border-radius:12px; padding:16px 20px; font-size:clamp(14px, 1.6vw, 18px); overflow-x:auto; }
+  ul { padding-left:22px; } li { margin:6px 0; }
+  a { color:var(--mint); }
+  .links a { display:inline-block; margin:6px 14px 6px 0; }
+</style>
+</head>
+<body>
+
+<section>
+  <span class="n">1</span>
+  <h1>SEEKER ATLAS</h1>
+  <p class="lead">Guess where on Earth the photo was taken.<br>Five places a day. The same five for every Seeker.</p>
+  <p class="muted">CLOCK IN — a Solana Mobile hackathon · Android · Mainnet</p>
+</section>
+
+<section>
+  <span class="n">2</span>
+  <h2>Why open the phone tomorrow?</h2>
+  <div class="cards">
+    <div class="card"><b>A daily ritual</b>One shared puzzle per day, like Wordle: short, finite, and something to talk about with friends.</div>
+    <div class="card"><b>A proven loop</b>GeoGuessr-style guessing: look for clues, commit to a spot, see how close you were. Instantly clear, endlessly replayable.</div>
+    <div class="card"><b>Missing on Seeker</b>Of 1,446 apps in the Solana dApp Store, none is a photo geo-guessing game. Neither is any public CLOCK IN repo we found.</div>
+  </div>
+</section>
+
+<section>
+  <span class="n">3</span>
+  <div class="row">
+    <div>
+      <h2>How it plays</h2>
+      <ul>
+        <li>See a street, a market, a glacier.</li>
+        <li>Pinch the world map, tap your guess.</li>
+        <li>A dashed line to the answer: <span class="mint">5000 · e<sup>−km/1500</sup></span> points.</li>
+        <li>Five rounds, three minutes. Share spoiler-free squares:</li>
+      </ul>
+      <pre>Seeker Atlas #3 — 18450/25000
+🟩🟩🟨🟩🟧</pre>
+    </div>
+    <div class="phone"><img src="img/play.png" alt="Round screen: photo above, world map below"></div>
+  </div>
+</section>
+
+<section>
+  <span class="n">4</span>
+  <h2>Seeker-native, on-chain, no backend</h2>
+  <div class="cards">
+    <div class="card"><b>Mobile Wallet Adapter</b>Connect Seed Vault, Phantom or Solflare. Everything is signed on the phone.</div>
+    <div class="card"><b>Seal your score</b>A memo transaction <code>atlas1|day|score|player|genesis|hints</code> that references one board account. The leaderboard <i>is</i> that account's history.</div>
+    <div class="card"><b>Verified Seeker</b>The app finds the wallet's Seeker Genesis Token. Verified players get a badge — and the board keeps one entry per Genesis Token.</div>
+    <div class="card"><b>Can't spoof a Seeker</b>Memo text is self-reported, so we trust it only as far as the chain backs it: fee payer must be the player, and the Genesis Token must really be in that wallet.</div>
+  </div>
+</section>
+
+<section>
+  <span class="n">5</span>
+  <h2><span class="mint">SKR</span> as a game resource</h2>
+  <p class="lead">Stuck on a photo? <b>Burn 5 SKR</b> to highlight its continent on the map.</p>
+  <ul class="lead" style="font-size:20px">
+    <li><code>BurnChecked</code> on the SKR mint — tokens leave circulation. Nobody, including us, receives them.</li>
+    <li>Hints are written into your sealed score and shown on the leaderboard (💡2), so a clean run is worth more.</li>
+    <li>A small, repeatable reason to hold and spend SKR every day.</li>
+  </ul>
+</section>
+
+<section>
+  <span class="n">6</span>
+  <h2>Honest about cheating</h2>
+  <div class="cards">
+    <div class="card"><b>No spoilers in the app</b>Credits name the place, so author and source link appear only after you guess. Full credits in the repo.</div>
+    <div class="card"><b>What we can't stop</b>Any public photo can be reverse-image-searched, and answers ship in the APK. The board is for bragging rights, not prizes.</div>
+    <div class="card"><b>The real fix</b>Photos shot by Seeker owners: taken in-app, geotagged by the phone, never published anywhere else.</div>
+  </div>
+</section>
+
+<section>
+  <span class="n">7</span>
+  <h2>Roadmap</h2>
+  <ul class="lead" style="font-size:22px">
+    <li><b>Seeker-shot photos.</b> Owners snap places around them in-app; when a photo makes the daily five, players can tip its author in SKR.</li>
+    <li><b>Streaks &amp; leagues.</b> Daily streaks read from your sealed scores; a Seeker-only league with verified players.</li>
+    <li><b>Duels.</b> Challenge a friend to the same five photos.</li>
+    <li><b>dApp Store release</b> with weekly photo packs.</li>
+  </ul>
+</section>
+
+<section>
+  <span class="n">8</span>
+  <h2>Built for CLOCK IN</h2>
+  <div class="cards">
+    <div class="card"><b>Stack</b>Kotlin 2.4 · Jetpack Compose · MWA clientlib-ktx 2.2 · sol4k · plain JSON-RPC</div>
+    <div class="card"><b>Content</b>150 CC-licensed photos from 125 countries · 30 days without repeats</div>
+    <div class="card"><b>Tested</b>Unit tests for scoring, projection, daily rotation, memo parsing, Genesis detection, burn encoding. Mainnet simulations of memo and burn transactions.</div>
+  </div>
+  <p class="links" style="margin-top:28px">
+    <a href="https://github.com/progmax/seeker-atlas">GitHub</a>
+    <a href="https://github.com/progmax/seeker-atlas/releases/download/v0.1.0/seeker-atlas.apk">Download APK</a>
+  </p>
+</section>
+
+</body>
+</html>
