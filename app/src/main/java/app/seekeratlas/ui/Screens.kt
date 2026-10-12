@@ -124,8 +124,10 @@ private fun WalletCard(vm: GameViewModel, sender: ActivityResultSender) {
                 if (vm.genesisMint != null) Badge("✓ Verified Seeker", Mint) else Badge("Unverified", Muted)
             }
             Text(
-                vm.skrBalance?.let { "%.2f SKR".format(it) } ?: "Loading balance…",
-                color = Muted, fontSize = 14.sp,
+                vm.skrBalance?.let { "%.2f SKR".format(it) }
+                    ?: if (vm.balanceError) "Balance unavailable · tap to retry" else "Loading balance…",
+                color = if (vm.balanceError) Mint else Muted, fontSize = 14.sp,
+                modifier = Modifier.clickable(enabled = vm.balanceError) { vm.refreshWallet() },
             )
             if (vm.genesisMint == null) {
                 Text("Your score counts on the board once per Seeker Genesis Token.", color = Muted, fontSize = 12.sp)

@@ -45,4 +45,18 @@ class NetworkSimulationTest {
         }
         assert(errors.any { it == JsonNull }) { "no holder could burn: $errors" }
     }
+
+    @Test fun skrBalanceAndGenesisReadForHolders() = runBlocking {
+        assumeTrue(System.getenv("ATLAS_NETWORK_TESTS") == "1")
+        val owners = System.getenv("ATLAS_SKR_OWNERS").orEmpty().split(",").filter { it.isNotBlank() }.take(3)
+        assumeTrue(owners.isNotEmpty())
+        owners.forEach { o ->
+            val t0 = System.currentTimeMillis()
+            val bal = runCatching { rpc.skrBalance(o) }
+            val t1 = System.currentTimeMillis()
+            val sgt = runCatching { rpc.genesisMint(o) }
+            val t2 = System.currentTimeMillis()
+            println("BAL $o -> $bal in ${t1 - t0}ms; sgt=$sgt in ${t2 - t1}ms")
+        }
+    }
 }

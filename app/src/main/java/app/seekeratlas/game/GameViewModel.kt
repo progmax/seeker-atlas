@@ -2,6 +2,7 @@ package app.seekeratlas.game
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -23,6 +24,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 private const val BOARD_VERIFY_LIMIT = 25
+private const val TAG = "SeekerAtlas"
 
 enum class Screen { Home, Round, Summary, Board }
 
@@ -46,6 +48,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     var wallet by mutableStateOf(prefs.getString("wallet", null)); private set
     var genesisMint by mutableStateOf(prefs.getString("sgt", null)); private set
     var skrBalance by mutableStateOf<Double?>(null); private set
+    var balanceError by mutableStateOf(false); private set
     var board by mutableStateOf<List<BoardEntry>>(emptyList()); private set
     var sealedSignature by mutableStateOf(prefs.getString("sealed_$epochDay", null)); private set
     /** Round indexes of today's puzzle where the player burned SKR for a hint. */
@@ -124,11 +127,23 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun refreshWallet(address: String) = viewModelScope.launch {
-        runCatching { rpc.skrBalance(address) }.onSuccess { skrBalance = it }
-        runCatching { rpc.genesisMint(address) }.onSuccess {
-            genesisMint = it
-            prefs.edit().putString("sgt", it).apply()
+    fun refreshWallet() { wallet?.let(::refreshWallet) }
+
+    private fun refreshWallet(address: String) {
+        balanceError = false
+        viewModelScope.launch {
+            runCatching { rpc.skrBalance(address) }
+                .onSuccess { skrBalance = it }
+                .onFailure { balanceError = true; Log.w(TAG, "SKR balance failed", it) }
+        }
+        // Separate coroutine: the Token-2022 scan can be slow on public RPC and must not hold up the balance.
+        viewModelScope.launch {
+            runCatching { rpc.genesisMint(address) }
+                .onSuccess {
+                    genesisMint = it
+                    prefs.edit().putString("sgt", it).apply()
+                }
+                .onFailure { Log.w(TAG, "Genesis lookup failed", it) }
         }
     }
 
