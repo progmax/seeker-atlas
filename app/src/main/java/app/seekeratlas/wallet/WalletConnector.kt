@@ -44,8 +44,7 @@ class WalletConnector {
 
     /**
      * One wallet visit: authorize, then sign and send the transaction built for the authorized address.
-     * Phantom refuses to reauthorize this app's saved token, so a fresh authorize keeps it to a single
-     * Connect + Confirm instead of a separate Connect step beforehand.
+     * The first action shows Connect + Confirm; later ones reuse the saved token and only ask to Confirm.
      * [minContextSlot] is mandatory for Phantom: without it the wallet silently drops the request.
      */
     suspend fun signAndSend(
@@ -60,11 +59,19 @@ class WalletConnector {
             maxRetries = null,
             waitForCommitmentToSendNextTransaction = false,
         )
-        adapter.authToken = null
-        val r = adapter.transact(sender) { auth ->
-            val address = Base58.encode(auth.accounts.first().publicKey)
-            val sig = signAndSendTransactions(arrayOf(build(address)), params).signatures.first()
-            Sent(Base58.encode(sig), address)
+        val attempt = suspend {
+            adapter.transact(sender) { auth ->
+                val address = Base58.encode(auth.accounts.first().publicKey)
+                val sig = signAndSendTransactions(arrayOf(build(address)), params).signatures.first()
+                Sent(Base58.encode(sig), address)
+            }
+        }
+        // A saved token makes the wallet skip Connect. If it rejects the token, authorize once more.
+        var r = attempt()
+        if (r is TransactionResult.Failure && adapter.authToken != null && isAuthRejected(r.e)) {
+            android.util.Log.i("SeekerAtlas", "saved authorization rejected, authorizing again")
+            adapter.authToken = null
+            r = attempt()
         }
         return when (r) {
             is TransactionResult.Success -> WalletResult.Ok(r.payload)
@@ -76,4 +83,10 @@ class WalletConnector {
         }
     }
 
+
+    private fun isAuthRejected(e: Throwable): Boolean =
+        generateSequence(e) { it.cause }.any { t ->
+            val text = "${t::class.java.name} ${t.message}".lowercase()
+            "authorization request failed" in text || "authorizationfailed" in text || "invalid auth" in text
+        }
 }

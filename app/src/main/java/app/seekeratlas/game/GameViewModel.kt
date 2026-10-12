@@ -161,6 +161,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         when (val r = connector.signAndSend(sender, bh.slot) { player -> Transactions.skrBurn(player, Config.HINT_SKR, memo, bh.hash) }) {
             is WalletResult.Ok -> {
                 rememberWallet(r.value.address)
+                prefs.edit().putString("auth", connector.authToken).apply()
                 if (!confirmed(r.value.signature)) return@launchBusy
                 hinted = hinted + round
                 prefs.edit().putLong("hint_day", epochDay).putStringSet("hints", hinted.map { it.toString() }.toSet()).apply()
@@ -183,6 +184,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         when (r) {
             is WalletResult.Ok -> {
                 rememberWallet(r.value.address)
+                prefs.edit().putString("auth", connector.authToken).apply()
                 if (!confirmed(r.value.signature)) return@launchBusy
                 sealedSignature = r.value.signature
                 prefs.edit().putString("sealed_$epochDay", r.value.signature).apply()
