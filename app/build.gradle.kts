@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -16,10 +18,22 @@ android {
         versionName = "0.1.0"
     }
 
+    // Release key lives outside the repo; keystore.properties (git-ignored) points to it.
+    val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }
+        ?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+    signingConfigs {
+        if (keystoreProps != null) create("release") {
+            storeFile = file(keystoreProps.getProperty("storeFile"))
+            storePassword = keystoreProps.getProperty("storePassword")
+            keyAlias = keystoreProps.getProperty("keyAlias")
+            keyPassword = keystoreProps.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     buildFeatures { compose = true }
