@@ -18,7 +18,7 @@ sealed interface WalletResult<out T> {
 class WalletConnector {
     private val adapter = MobileWalletAdapter(
         ConnectionIdentity(
-            identityUri = Uri.parse("https://progmax.github.io"),
+            identityUri = Uri.parse("https://seeker-atlas-omega.vercel.app"),
             iconUri = Uri.parse("icon.png"),
             identityName = "Seeker Atlas",
         ),
@@ -30,15 +30,29 @@ class WalletConnector {
         get() = adapter.authToken
         set(value) { adapter.authToken = value }
 
-    suspend fun connect(sender: ActivityResultSender): WalletResult<String> =
-        when (val r = withFreshAuthOnFailure { adapter.connect(sender) }) {
+    /** First connection: always a fresh authorize. */
+    suspend fun connect(sender: ActivityResultSender): WalletResult<String> {
+        adapter.authToken = null
+        return when (val r = adapter.connect(sender)) {
             is TransactionResult.Success -> WalletResult.Ok(Base58.encode(r.authResult.accounts.first().publicKey))
             is TransactionResult.NoWalletFound -> WalletResult.Error("No Solana wallet found. Install Phantom, Solflare or use Seed Vault.")
             is TransactionResult.Failure -> WalletResult.Error(r.message)
         }
+    }
 
-    /** [minContextSlot] is mandatory for Phantom: without it the wallet silently drops the request. */
-    suspend fun signAndSend(sender: ActivityResultSender, tx: ByteArray, minContextSlot: Long): WalletResult<String> {
+    data class Sent(val signature: String, val address: String)
+
+    /**
+     * One wallet visit: authorize, then sign and send the transaction built for the authorized address.
+     * Phantom refuses to reauthorize this app's saved token, so a fresh authorize keeps it to a single
+     * Connect + Confirm instead of a separate Connect step beforehand.
+     * [minContextSlot] is mandatory for Phantom: without it the wallet silently drops the request.
+     */
+    suspend fun signAndSend(
+        sender: ActivityResultSender,
+        minContextSlot: Long,
+        build: (address: String) -> ByteArray,
+    ): WalletResult<Sent> {
         val params = TransactionParams(
             minContextSlot = minContextSlot.toInt(),
             commitment = "confirmed",
@@ -46,10 +60,15 @@ class WalletConnector {
             maxRetries = null,
             waitForCommitmentToSendNextTransaction = false,
         )
-        val r = withFreshAuthOnFailure { adapter.transact(sender) { signAndSendTransactions(arrayOf(tx), params) } }
+        adapter.authToken = null
+        val r = adapter.transact(sender) { auth ->
+            val address = Base58.encode(auth.accounts.first().publicKey)
+            val sig = signAndSendTransactions(arrayOf(build(address)), params).signatures.first()
+            Sent(Base58.encode(sig), address)
+        }
         return when (r) {
-            is TransactionResult.Success -> WalletResult.Ok(Base58.encode(r.payload.signatures.first()))
-            is TransactionResult.NoWalletFound -> WalletResult.Error("No Solana wallet found.")
+            is TransactionResult.Success -> WalletResult.Ok(r.payload)
+            is TransactionResult.NoWalletFound -> WalletResult.Error("No Solana wallet found. Install Phantom, Solflare or use Seed Vault.")
             is TransactionResult.Failure -> {
                 android.util.Log.w("SeekerAtlas", "MWA failure: ${r.message}", r.e)
                 WalletResult.Error(r.message)
@@ -57,12 +76,4 @@ class WalletConnector {
         }
     }
 
-    /**
-     * Phantom rejects reauthorize with a token from an earlier session ("authorization request failed"),
-     * which used to cost the player a second prompt. Every action authorizes fresh in one wallet session.
-     */
-    private suspend fun <T> withFreshAuthOnFailure(block: suspend () -> TransactionResult<T>): TransactionResult<T> {
-        adapter.authToken = null
-        return block()
-    }
 }

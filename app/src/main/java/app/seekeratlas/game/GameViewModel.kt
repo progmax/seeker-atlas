@@ -150,43 +150,56 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Burns SKR and reveals the continent of the current photo. Counted on the leaderboard. */
     fun hint(sender: ActivityResultSender) = launchBusy {
-        if (revealed || roundIndex in hinted || rounds[roundIndex].hintRegion == null) return@launchBusy
-        val player = wallet ?: return@launchBusy run { message = "Connect a wallet to buy hints with SKR" }
+        val round = roundIndex
+        if (revealed || round in hinted || rounds[round].hintRegion == null) return@launchBusy
         val balance = skrBalance
         if (balance != null && balance < Config.HINT_SKR) {
             return@launchBusy run { message = "You need ${Config.HINT_SKR} SKR for a hint (you have %.2f)".format(balance) }
         }
-        val round = roundIndex
         val memo = "atlas1-hint|$epochDay|${round + 1}"
         val bh = rpc.latestBlockhash()
-        val tx = Transactions.skrBurn(player, Config.HINT_SKR, memo, bh.hash)
-        when (val r = connector.signAndSend(sender, tx, bh.slot)) {
+        when (val r = connector.signAndSend(sender, bh.slot) { player -> Transactions.skrBurn(player, Config.HINT_SKR, memo, bh.hash) }) {
             is WalletResult.Ok -> {
-                if (!confirmed(r.value)) return@launchBusy
+                rememberWallet(r.value.address)
+                if (!confirmed(r.value.signature)) return@launchBusy
                 hinted = hinted + round
                 prefs.edit().putLong("hint_day", epochDay).putStringSet("hints", hinted.map { it.toString() }.toSet()).apply()
-                refreshWallet(player)
+                refreshWallet(r.value.address)
             }
             is WalletResult.Error -> { Log.w(TAG, "wallet error: ${r.message}"); message = r.message }
         }
     }
 
     fun seal(sender: ActivityResultSender) = launchBusy {
-        val player = wallet ?: return@launchBusy run { message = "Connect a wallet first" }
-        val memo = Board.memo(epochDay, total, player, genesisMint, hinted.size)
         val bh = rpc.latestBlockhash()
-        val tx = Transactions.scoreMemo(player, memo, bh.hash)
-        when (val r = connector.signAndSend(sender, tx, bh.slot)) {
+        val score = total
+        val hints = hinted.size
+        // The Genesis Token belongs to whichever wallet signs, so look it up for that address inside the build step.
+        val known = wallet to genesisMint
+        val r = connector.signAndSend(sender, bh.slot) { player ->
+            val sgt = if (known.first == player) known.second else null
+            Transactions.scoreMemo(player, Board.memo(epochDay, score, player, sgt, hints), bh.hash)
+        }
+        when (r) {
             is WalletResult.Ok -> {
-                if (!confirmed(r.value)) return@launchBusy
-                sealedSignature = r.value
-                prefs.edit().putString("sealed_$epochDay", r.value).apply()
+                rememberWallet(r.value.address)
+                if (!confirmed(r.value.signature)) return@launchBusy
+                sealedSignature = r.value.signature
+                prefs.edit().putString("sealed_$epochDay", r.value.signature).apply()
                 message = "Score sealed on Solana"
                 screen = Screen.Board
                 loadBoard()
             }
             is WalletResult.Error -> { Log.w(TAG, "wallet error: ${r.message}"); message = r.message }
         }
+    }
+
+    private fun rememberWallet(address: String) {
+        if (address == wallet) return
+        wallet = address
+        genesisMint = null
+        prefs.edit().putString("wallet", address).remove("sgt").apply()
+        refreshWallet(address)
     }
 
     fun loadBoard() {

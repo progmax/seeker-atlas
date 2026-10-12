@@ -164,7 +164,7 @@ private fun RoundScreen(vm: GameViewModel, sender: ActivityResultSender) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     val hintUsed = vm.roundIndex in vm.hinted
                     OutlinedButton(
-                        onClick = { if (vm.wallet == null) vm.connect(sender) else vm.hint(sender) },
+                        onClick = { vm.hint(sender) },
                         enabled = !hintUsed && photo.hintRegion != null,
                         modifier = Modifier.height(54.dp),
                     ) { Text(if (hintUsed) "💡 Used" else "💡 ${Config.HINT_SKR} SKR", color = if (hintUsed) Muted else Mint) }
@@ -235,9 +235,6 @@ private fun SummaryScreen(vm: GameViewModel, sender: ActivityResultSender) {
                 onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://solscan.io/tx/${vm.sealedSignature}"))) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
             ) { Text("Sealed on Solana ✓ · view tx", color = Mint) }
-            vm.wallet == null -> OutlinedButton(onClick = { vm.connect(sender) }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Text("Connect wallet to seal score", color = Color.White)
-            }
             else -> OutlinedButton(onClick = { vm.seal(sender) }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Text("Seal score on Solana", color = Color.White)
             }
