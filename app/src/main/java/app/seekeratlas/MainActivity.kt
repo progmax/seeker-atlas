@@ -18,6 +18,11 @@ import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 class MainActivity : ComponentActivity() {
     private val vm: GameViewModel by viewModels()
 
+    override fun onResume() {
+        super.onResume()
+        vm.checkDay()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

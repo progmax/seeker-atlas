@@ -21,7 +21,21 @@ class RpcException(message: String) : Exception(message)
 
 class SolanaRpc(private val url: String = Config.RPC_URL) {
 
-    suspend fun call(method: String, params: JsonArray): JsonElement = withContext(Dispatchers.IO) {
+    /** Public RPC rate-limits hard; back off and retry on HTTP 429. */
+    suspend fun call(method: String, params: JsonArray): JsonElement {
+        repeat(3) { attempt ->
+            try {
+                return callOnce(method, params)
+            } catch (e: RateLimited) {
+                kotlinx.coroutines.delay(700L * (attempt + 1))
+            }
+        }
+        return callOnce(method, params)
+    }
+
+    private class RateLimited : Exception("RPC rate limited")
+
+    private suspend fun callOnce(method: String, params: JsonArray): JsonElement = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             put("jsonrpc", "2.0"); put("id", 1); put("method", method); put("params", params)
         }.toString()
@@ -32,9 +46,14 @@ class SolanaRpc(private val url: String = Config.RPC_URL) {
             readTimeout = 20_000
             setRequestProperty("Content-Type", "application/json")
         }
-        conn.outputStream.use { it.write(body.toByteArray()) }
-        val text = (if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream)
-            .bufferedReader().use { it.readText() }
+        val text = try {
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            if (conn.responseCode == 429) throw RateLimited()
+            if (conn.responseCode !in 200..299) throw RpcException("HTTP ${conn.responseCode}")
+            conn.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            conn.disconnect()
+        }
         val json = Json.parseToJsonElement(text).jsonObject
         json["error"]?.let { throw RpcException(it.toString()) }
         json["result"] ?: throw RpcException("empty result")
@@ -44,16 +63,37 @@ class SolanaRpc(private val url: String = Config.RPC_URL) {
         call("getLatestBlockhash", buildJsonArray { add(buildJsonObject { put("commitment", "finalized") }) })
             .jsonObject["value"]!!.jsonObject["blockhash"]!!.jsonPrimitive.content
 
+    /** Balance of the SKR associated token account — the account tips and burns are paid from. */
     suspend fun skrBalance(owner: String): Double {
-        val result = call("getTokenAccountsByOwner", buildJsonArray {
-            add(JsonPrimitive(owner))
-            add(buildJsonObject { put("mint", Config.SKR_MINT) })
+        val ata = Transactions.skrAta(owner)
+        val info = call("getAccountInfo", buildJsonArray {
+            add(JsonPrimitive(ata))
             add(buildJsonObject { put("encoding", "jsonParsed") })
-        })
-        return result.jsonObject["value"]!!.jsonArray.sumOf { acc ->
-            acc.jsonObject["account"]!!.jsonObject["data"]!!.jsonObject["parsed"]!!.jsonObject["info"]!!
-                .jsonObject["tokenAmount"]!!.jsonObject["uiAmount"]?.jsonPrimitive?.content?.toDoubleOrNull() ?: 0.0
+        }).jsonObject["value"]
+        if (info == null || info is kotlinx.serialization.json.JsonNull) return 0.0
+        return info.jsonObject["data"]!!.jsonObject["parsed"]!!.jsonObject["info"]!!
+            .jsonObject["tokenAmount"]!!.jsonObject["uiAmount"]?.jsonPrimitive?.content?.toDoubleOrNull() ?: 0.0
+    }
+
+    /** true = confirmed, false = failed on-chain, null = still unknown after the timeout. */
+    suspend fun awaitConfirmation(signature: String, timeoutMs: Long = 45_000): Boolean? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val status = runCatching {
+                call("getSignatureStatuses", buildJsonArray {
+                    add(buildJsonArray { add(JsonPrimitive(signature)) })
+                    add(buildJsonObject { put("searchTransactionHistory", true) })
+                }).jsonObject["value"]!!.jsonArray.first()
+            }.getOrNull()
+            if (status != null && status !is kotlinx.serialization.json.JsonNull) {
+                val o = status.jsonObject
+                if (o["err"] != null && o["err"] !is kotlinx.serialization.json.JsonNull) return false
+                val level = o["confirmationStatus"]?.jsonPrimitive?.content
+                if (level == "confirmed" || level == "finalized") return true
+            }
+            kotlinx.coroutines.delay(1_500)
         }
+        return null
     }
 
     /** Returns the wallet's Seeker Genesis Token mint, or null if it holds none. */
@@ -63,13 +103,14 @@ class SolanaRpc(private val url: String = Config.RPC_URL) {
             add(buildJsonObject { put("programId", TOKEN_2022) })
             add(buildJsonObject { put("encoding", "jsonParsed") })
         })
-        val mints = Genesis.candidateMints(accounts).take(100)
-        if (mints.isEmpty()) return null
-        val infos = call("getMultipleAccounts", buildJsonArray {
-            add(buildJsonArray { mints.forEach { add(JsonPrimitive(it)) } })
-            add(buildJsonObject { put("encoding", "jsonParsed") })
-        })
-        return Genesis.genesisMint(mints, infos)
+        for (batch in Genesis.candidateMints(accounts).distinct().chunked(100)) {
+            val infos = call("getMultipleAccounts", buildJsonArray {
+                add(buildJsonArray { batch.forEach { add(JsonPrimitive(it)) } })
+                add(buildJsonObject { put("encoding", "jsonParsed") })
+            })
+            Genesis.genesisMint(batch, infos)?.let { return it }
+        }
+        return null
     }
 
     suspend fun boardEntries(limit: Int = 1000): List<SignedEntry> {

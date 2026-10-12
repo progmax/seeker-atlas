@@ -17,6 +17,7 @@ import app.seekeratlas.wallet.Transactions
 import app.seekeratlas.wallet.WalletConnector
 import app.seekeratlas.wallet.WalletResult
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -32,10 +33,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val rpc = SolanaRpc()
     private val connector = WalletConnector()
 
-    val epochDay: Long = LocalDate.now(ZoneOffset.UTC).toEpochDay()
-    val puzzle: Int = Daily.puzzleNumber(epochDay)
     private val pool = Photos.load(app)
-    val rounds: List<Photo> = Daily.pick(epochDay, pool.size).map { pool[it] }
+    var epochDay by mutableStateOf(today()); private set
+    val puzzle: Int get() = Daily.puzzleNumber(epochDay)
+    var rounds by mutableStateOf(roundsFor(epochDay)); private set
 
     var screen by mutableStateOf(Screen.Home); private set
     var roundIndex by mutableStateOf(0); private set
@@ -49,6 +50,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     var sealedSignature by mutableStateOf(prefs.getString("sealed_$epochDay", null)); private set
     var tipped by mutableStateOf(prefs.getStringSet("tipped", emptySet())!!.toSet()); private set
     var busy by mutableStateOf(false); private set
+    private var boardJob: Job? = null
     var message by mutableStateOf<String?>(null)
 
     val finished: Boolean get() = results.size >= rounds.size
@@ -58,6 +60,20 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     init {
         connector.authToken = prefs.getString("auth", null)
         wallet?.let { refreshWallet(it) }
+    }
+
+    /** Called on every resume: a new UTC day starts a fresh puzzle even if the app stayed open. */
+    fun checkDay() {
+        val now = today()
+        if (now == epochDay) return
+        epochDay = now
+        rounds = roundsFor(now)
+        results = loadResults()
+        roundIndex = 0
+        pendingGuess = null
+        sealedSignature = prefs.getString("sealed_$now", null)
+        board = emptyList()
+        screen = Screen.Home
     }
 
     fun open(target: Screen) {
@@ -84,6 +100,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun next() {
+        if (!revealed) return
         if (roundIndex + 1 < rounds.size) {
             roundIndex++
             pendingGuess = null
@@ -119,6 +136,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val tx = Transactions.skrTip(from, to, Config.TIP_SKR, rpc.latestBlockhash())
         when (val r = connector.signAndSend(sender, tx)) {
             is WalletResult.Ok -> {
+                if (!confirmed(r.value)) return@launchBusy
                 tipped = tipped + photo.id
                 prefs.edit().putStringSet("tipped", tipped).apply()
                 message = "Sent ${Config.TIP_SKR} SKR to ${if (photo.wallet != null) "the photographer" else "the Atlas photo fund"}"
@@ -134,6 +152,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val tx = Transactions.scoreMemo(player, memo, rpc.latestBlockhash())
         when (val r = connector.signAndSend(sender, tx)) {
             is WalletResult.Ok -> {
+                if (!confirmed(r.value)) return@launchBusy
                 sealedSignature = r.value
                 prefs.edit().putString("sealed_$epochDay", r.value).apply()
                 message = "Score sealed on Solana"
@@ -144,37 +163,69 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun loadBoard() = viewModelScope.launch {
+    fun loadBoard() {
+        if (boardJob?.isActive == true) return
+        boardJob = viewModelScope.launch {
         runCatching {
             val today = rpc.boardEntries().filter { it.entry.day == epochDay }
                 .sortedByDescending { it.entry.score }
                 .take(BOARD_VERIFY_LIMIT)
-            Board.verify(today, signerOf = { rpc.feePayer(it) }, genesisOf = { rpc.genesisMint(it) })
+            // A network error on one entry drops only that entry (signer) or its badge (Genesis).
+            Board.verify(
+                today,
+                signerOf = { sig -> runCatching { rpc.feePayer(sig) }.getOrNull() },
+                genesisOf = { player -> runCatching { rpc.genesisMint(player) }.getOrNull() },
+            )
         }
             .onSuccess { entries ->
                 val mine = sealedSignature?.let { wallet?.let { w -> BoardEntry(epochDay, total, w, genesisMint) } }
                 board = Board.rank(entries + listOfNotNull(mine), epochDay)
             }
             .onFailure { message = "Leaderboard unavailable: ${it.message}" }
+        }
     }
 
-    private fun launchBusy(block: suspend () -> Unit) = viewModelScope.launch {
+    private suspend fun confirmed(signature: String): Boolean = when (rpc.awaitConfirmation(signature)) {
+        true -> true
+        false -> { message = "Transaction failed on-chain"; false }
+        null -> { message = "Sent, but not confirmed yet. Check your wallet in a minute."; false }
+    }
+
+    /** One wallet action at a time: a second tap while the wallet is open is ignored. */
+    private fun launchBusy(block: suspend () -> Unit) {
+        if (busy) return
         busy = true
-        try { block() } catch (e: Exception) { message = e.message ?: e.toString() } finally { busy = false }
+        viewModelScope.launch {
+            try { block() } catch (e: Exception) { message = e.message ?: e.toString() } finally { busy = false }
+        }
     }
 
+    /** Stored guesses only; distance and score are recomputed so corrupt or stale data can't crash or cheat. */
     private fun loadResults(): List<RoundResult> {
         if (prefs.getLong("day", -1) != epochDay) return emptyList()
-        return prefs.getString("results", "")!!.split(";").filter { it.isNotBlank() }.map {
-            val (lat, lon, d, s) = it.split(",")
-            RoundResult(LatLon(lat.toDouble(), lon.toDouble()), d.toDouble(), s.toInt())
-        }
+        val today = rounds
+        val guesses = runCatching {
+            prefs.getString("results", "").orEmpty().split(";").filter { it.isNotBlank() }.map {
+                val parts = it.split(",")
+                LatLon(parts[0].toDouble(), parts[1].toDouble())
+            }
+        }.getOrElse { emptyList() }
+        return guesses.take(today.size)
+            .filter { it.lat in -90.0..90.0 && it.lon in -180.0..180.0 }
+            .mapIndexed { i, g ->
+                val d = Geo.distanceKm(g, today[i].location)
+                RoundResult(g, d, Geo.score(d))
+            }
     }
 
     private fun saveResults() {
         prefs.edit()
             .putLong("day", epochDay)
-            .putString("results", results.joinToString(";") { "${it.guess.lat},${it.guess.lon},${it.distanceKm},${it.score}" })
+            .putString("results", results.joinToString(";") { "${it.guess.lat},${it.guess.lon}" })
             .apply()
     }
+
+    private fun roundsFor(day: Long): List<Photo> = Daily.pick(day, pool.size).map { pool[it] }
+
+    private fun today(): Long = LocalDate.now(ZoneOffset.UTC).toEpochDay()
 }

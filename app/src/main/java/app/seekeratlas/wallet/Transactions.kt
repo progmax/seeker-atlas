@@ -14,6 +14,9 @@ import org.sol4k.instruction.SplTransferInstruction
 /** Builds unsigned legacy transactions for the wallet to sign and send via Mobile Wallet Adapter. */
 object Transactions {
 
+    fun skrAta(owner: String): String =
+        PublicKey.findProgramDerivedAddress(PublicKey(owner), PublicKey(Config.SKR_MINT)).publicKey.toBase58()
+
     fun skrTip(from: String, to: String, amountSkr: Long, blockhash: String): ByteArray {
         val owner = PublicKey(from)
         val recipient = PublicKey(to)

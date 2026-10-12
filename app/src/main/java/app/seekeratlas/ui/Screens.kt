@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -180,9 +181,11 @@ private fun PhotoView(photo: Photo, modifier: Modifier) {
     Box(modifier.background(Color.Black)) {
         Image(bitmap, contentDescription = "Where is this?", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         Text(
-            "© ${photo.author} · ${photo.license}",
+            "© ${photo.author} · ${photo.license} · resized · source ↗",
             color = Color.White, fontSize = 10.sp,
-            modifier = Modifier.align(Alignment.BottomEnd).background(Color(0x99000000)).padding(horizontal = 6.dp, vertical = 2.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).background(Color(0x99000000))
+                .clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(photo.source))) }
+                .padding(horizontal = 6.dp, vertical = 4.dp),
         )
     }
 }
