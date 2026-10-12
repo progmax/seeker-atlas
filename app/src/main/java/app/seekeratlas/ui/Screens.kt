@@ -163,7 +163,7 @@ private fun RoundScreen(vm: GameViewModel, sender: ActivityResultSender) {
                     val hintUsed = vm.roundIndex in vm.hinted
                     OutlinedButton(
                         onClick = { if (vm.wallet == null) vm.connect(sender) else vm.hint(sender) },
-                        enabled = !hintUsed,
+                        enabled = !hintUsed && photo.hintRegion != null,
                         modifier = Modifier.height(54.dp),
                     ) { Text(if (hintUsed) "💡 Used" else "💡 ${Config.HINT_SKR} SKR", color = if (hintUsed) Muted else Mint) }
                     Box(Modifier.weight(1f)) {

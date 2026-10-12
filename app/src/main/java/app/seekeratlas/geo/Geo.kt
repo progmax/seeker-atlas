@@ -51,10 +51,12 @@ data class Region(val name: String, val north: Double, val south: Double, val we
         val CONTINENTS = listOf(
             Region("Europe", 72.0, 34.0, -25.0, 45.0),
             Region("Asia", 78.0, -11.0, 25.0, 180.0),
-            Region("Africa", 38.0, -35.0, -18.0, 52.0),
-            Region("North America", 84.0, 7.0, -170.0, -52.0),
+            Region("Africa", 38.0, -35.0, -26.0, 60.0),
+            Region("North America", 84.0, 7.0, -170.0, -12.0),
             Region("South America", 13.0, -56.0, -82.0, -34.0),
             Region("Oceania", 0.0, -48.0, 110.0, 180.0),
+            // Pacific islands east of the antimeridian (Samoa, Tonga, ...).
+            Region("Oceania", 0.0, -48.0, -180.0, -120.0),
             Region("Antarctica", -60.0, -90.0, -180.0, 180.0),
         )
 

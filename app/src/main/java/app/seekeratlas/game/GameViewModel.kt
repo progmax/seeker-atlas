@@ -134,7 +134,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Burns SKR and reveals the continent of the current photo. Counted on the leaderboard. */
     fun hint(sender: ActivityResultSender) = launchBusy {
-        if (revealed || roundIndex in hinted) return@launchBusy
+        if (revealed || roundIndex in hinted || rounds[roundIndex].hintRegion == null) return@launchBusy
         val player = wallet ?: return@launchBusy run { message = "Connect a wallet to buy hints with SKR" }
         val balance = skrBalance
         if (balance != null && balance < Config.HINT_SKR) {
