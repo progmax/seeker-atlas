@@ -143,7 +143,7 @@ private fun RoundScreen(vm: GameViewModel, sender: ActivityResultSender) {
             Text("Round ${vm.roundIndex + 1}/${vm.rounds.size}", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("${vm.total} pts", color = Mint, fontWeight = FontWeight.Bold)
         }
-        PhotoView(photo, Modifier.fillMaxWidth().weight(1f))
+        PhotoView(photo, revealed = result != null, modifier = Modifier.fillMaxWidth().weight(1f))
         val hintRegion = if (vm.roundIndex in vm.hinted) photo.hintRegion else null
         Box(Modifier.fillMaxWidth().weight(1f)) {
             WorldMap(
@@ -186,18 +186,19 @@ private fun RoundScreen(vm: GameViewModel, sender: ActivityResultSender) {
 }
 
 @Composable
-private fun PhotoView(photo: Photo, modifier: Modifier) {
+private fun PhotoView(photo: Photo, revealed: Boolean, modifier: Modifier) {
     val context = LocalContext.current
     val bitmap = remember(photo.file) {
         context.assets.open(photo.file).use { BitmapFactory.decodeStream(it) }.asImageBitmap()
     }
     Box(modifier.background(Color.Black)) {
         Image(bitmap, contentDescription = "Where is this?", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        // The source page names the place, so the link only unlocks after the guess.
         Text(
-            "© ${photo.author} · ${photo.license} · resized · source ↗",
+            "© ${photo.author} · ${photo.license} · resized" + if (revealed) " · source ↗" else "",
             color = Color.White, fontSize = 10.sp,
             modifier = Modifier.align(Alignment.BottomEnd).background(Color(0x99000000))
-                .clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(photo.source))) }
+                .then(if (revealed) Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(photo.source))) } else Modifier)
                 .padding(horizontal = 6.dp, vertical = 4.dp),
         )
     }
