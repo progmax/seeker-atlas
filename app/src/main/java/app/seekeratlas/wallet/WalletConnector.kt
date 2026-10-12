@@ -20,7 +20,9 @@ class WalletConnector {
             identityUri = Uri.parse("https://seekeratlas.app"),
             iconUri = Uri.parse("favicon.ico"),
             identityName = "Seeker Atlas",
-        )
+        ),
+        // The player may read the transaction in the wallet for a while; the library default is too short.
+        timeout = 180_000,
     ).apply { blockchain = Solana.Mainnet }
 
     var authToken: String?
@@ -39,14 +41,18 @@ class WalletConnector {
         return when (r) {
             is TransactionResult.Success -> WalletResult.Ok(Base58.encode(r.payload.signatures.first()))
             is TransactionResult.NoWalletFound -> WalletResult.Error("No Solana wallet found.")
-            is TransactionResult.Failure -> WalletResult.Error(r.message)
+            is TransactionResult.Failure -> {
+                android.util.Log.w("SeekerAtlas", "MWA failure: ${r.message}", r.e)
+                WalletResult.Error(r.message)
+            }
         }
     }
 
-    /** A revoked or expired auth token makes reauthorize fail; drop it once and authorize from scratch. */
+    /**
+     * Phantom rejects reauthorize with a token from an earlier session ("authorization request failed"),
+     * which used to cost the player a second prompt. Every action authorizes fresh in one wallet session.
+     */
     private suspend fun <T> withFreshAuthOnFailure(block: suspend () -> TransactionResult<T>): TransactionResult<T> {
-        val first = block()
-        if (first !is TransactionResult.Failure || adapter.authToken == null) return first
         adapter.authToken = null
         return block()
     }

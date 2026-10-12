@@ -123,13 +123,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.edit().putString("wallet", r.value).putString("auth", connector.authToken).apply()
                 refreshWallet(r.value)
             }
-            is WalletResult.Error -> message = r.message
+            is WalletResult.Error -> { Log.w(TAG, "wallet error: ${r.message}"); message = r.message }
         }
     }
 
     fun refreshWallet() { wallet?.let(::refreshWallet) }
 
     private fun refreshWallet(address: String) {
+        Log.i(TAG, "wallet $address")
         balanceError = false
         viewModelScope.launch {
             runCatching { rpc.skrBalance(address) }
@@ -165,7 +166,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.edit().putLong("hint_day", epochDay).putStringSet("hints", hinted.map { it.toString() }.toSet()).apply()
                 refreshWallet(player)
             }
-            is WalletResult.Error -> message = r.message
+            is WalletResult.Error -> { Log.w(TAG, "wallet error: ${r.message}"); message = r.message }
         }
     }
 
@@ -182,7 +183,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 screen = Screen.Board
                 loadBoard()
             }
-            is WalletResult.Error -> message = r.message
+            is WalletResult.Error -> { Log.w(TAG, "wallet error: ${r.message}"); message = r.message }
         }
     }
 
@@ -219,7 +220,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (busy) return
         busy = true
         viewModelScope.launch {
-            try { block() } catch (e: Exception) { message = e.message ?: e.toString() } finally { busy = false }
+            try { block() } catch (e: Exception) {
+                Log.w(TAG, "wallet action failed", e)
+                message = e.message ?: e.toString()
+            } finally { busy = false }
         }
     }
 

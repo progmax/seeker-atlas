@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         vm.checkDay()
+        vm.refreshWallet()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
