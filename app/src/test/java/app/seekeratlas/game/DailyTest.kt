@@ -20,6 +20,11 @@ class DailyTest {
         assertNotEquals(Daily.pick(20_738, 50), Daily.pick(20_739, 50))
     }
 
+    @Test fun noRepeatsUntilPoolIsExhausted() {
+        val seen = (0 until 10).flatMap { Daily.pick(Daily.LAUNCH_EPOCH_DAY + it, 50) }
+        assertEquals(50, seen.toSet().size)
+    }
+
     @Test fun smallPoolTakesWhatExists() {
         assertEquals(3, Daily.pick(1, 3).size)
     }

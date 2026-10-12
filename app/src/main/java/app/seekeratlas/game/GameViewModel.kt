@@ -21,6 +21,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+private const val BOARD_VERIFY_LIMIT = 25
+
 enum class Screen { Home, Round, Summary, Board }
 
 data class RoundResult(val guess: LatLon, val distanceKm: Double, val score: Int)
@@ -143,7 +145,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun loadBoard() = viewModelScope.launch {
-        runCatching { rpc.boardEntries() }
+        runCatching {
+            val today = rpc.boardEntries().filter { it.entry.day == epochDay }
+                .sortedByDescending { it.entry.score }
+                .take(BOARD_VERIFY_LIMIT)
+            Board.verify(today, signerOf = { rpc.feePayer(it) }, genesisOf = { rpc.genesisMint(it) })
+        }
             .onSuccess { entries ->
                 val mine = sealedSignature?.let { wallet?.let { w -> BoardEntry(epochDay, total, w, genesisMint) } }
                 board = Board.rank(entries + listOfNotNull(mine), epochDay)

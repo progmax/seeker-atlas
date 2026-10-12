@@ -42,4 +42,21 @@ class BoardTest {
         assertEquals(listOf("B", "C"), ranked.map { it.player })
         assertEquals(listOf(15000, 12000), ranked.map { it.score })
     }
+
+    @Test fun verificationDropsForgedPlayerAndStripsForgedGenesis() = kotlinx.coroutines.runBlocking {
+        val honest = SignedEntry("sig1", BoardEntry(20_738, 20_000, "Alice", "sgtA"))
+        val forgedPlayer = SignedEntry("sig2", BoardEntry(20_738, 25_000, "Victim", "sgtV"))
+        val forgedGenesis = SignedEntry("sig3", BoardEntry(20_738, 22_000, "Bob", "sgtA"))
+        val signers = mapOf("sig1" to "Alice", "sig2" to "Mallory", "sig3" to "Bob")
+        val genesis = mapOf("Alice" to "sgtA", "Bob" to null)
+        val verified = Board.verify(
+            listOf(honest, forgedPlayer, forgedGenesis),
+            signerOf = { signers[it] },
+            genesisOf = { genesis[it] },
+        )
+        assertEquals(
+            listOf(BoardEntry(20_738, 22_000, "Bob", null), BoardEntry(20_738, 20_000, "Alice", "sgtA")),
+            verified.sortedByDescending { it.score },
+        )
+    }
 }

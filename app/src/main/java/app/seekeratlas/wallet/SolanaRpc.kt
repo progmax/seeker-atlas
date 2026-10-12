@@ -72,7 +72,7 @@ class SolanaRpc(private val url: String = Config.RPC_URL) {
         return Genesis.genesisMint(mints, infos)
     }
 
-    suspend fun boardEntries(limit: Int = 1000): List<BoardEntry> {
+    suspend fun boardEntries(limit: Int = 1000): List<SignedEntry> {
         val sigs = call("getSignaturesForAddress", buildJsonArray {
             add(JsonPrimitive(Config.BOARD_ADDRESS))
             add(buildJsonObject { put("limit", limit) })
@@ -80,8 +80,20 @@ class SolanaRpc(private val url: String = Config.RPC_URL) {
         return sigs.jsonArray.mapNotNull { s ->
             val o = s.jsonObject
             if (o["err"]?.let { it !is kotlinx.serialization.json.JsonNull } == true) return@mapNotNull null
-            o["memo"]?.jsonPrimitive?.contentOrNullSafe()?.let(Board::parse)
+            val entry = o["memo"]?.jsonPrimitive?.contentOrNullSafe()?.let(Board::parse) ?: return@mapNotNull null
+            SignedEntry(o["signature"]!!.jsonPrimitive.content, entry)
         }
+    }
+
+    /** First account key of a legacy/v0 transaction = fee payer = signer. */
+    suspend fun feePayer(signature: String): String? {
+        val tx = call("getTransaction", buildJsonArray {
+            add(JsonPrimitive(signature))
+            add(buildJsonObject { put("encoding", "json"); put("maxSupportedTransactionVersion", 0); put("commitment", "confirmed") })
+        })
+        if (tx is kotlinx.serialization.json.JsonNull) return null
+        return tx.jsonObject["transaction"]!!.jsonObject["message"]!!.jsonObject["accountKeys"]!!.jsonArray
+            .firstOrNull()?.jsonPrimitive?.content
     }
 
     private fun JsonPrimitive.contentOrNullSafe(): String? = if (isString) content else null

@@ -6,6 +6,8 @@ data class BoardEntry(val day: Long, val score: Int, val player: String, val sgt
     val verified: Boolean get() = sgtMint != null
 }
 
+data class SignedEntry(val signature: String, val entry: BoardEntry)
+
 /** On-chain daily leaderboard: each result is a memo transaction that references [app.seekeratlas.Config.BOARD_ADDRESS]. */
 object Board {
     private const val PREFIX = "atlas1"
@@ -30,4 +32,22 @@ object Board {
             .groupBy { it.sgtMint ?: "wallet:${it.player}" }
             .map { (_, group) -> group.maxBy { it.score } }
             .sortedByDescending { it.score }
+
+    /**
+     * Memo text is self-reported, so trust it only as far as the chain backs it: the transaction's
+     * fee payer must be the claimed player, and a claimed Genesis Token must really be in that wallet.
+     */
+    suspend fun verify(
+        entries: List<SignedEntry>,
+        signerOf: suspend (signature: String) -> String?,
+        genesisOf: suspend (player: String) -> String?,
+    ): List<BoardEntry> {
+        val genesisCache = mutableMapOf<String, String?>()
+        return entries.mapNotNull { (sig, e) ->
+            if (signerOf(sig) != e.player) return@mapNotNull null
+            if (e.sgtMint == null) return@mapNotNull e
+            val owned = genesisCache.getOrPut(e.player) { genesisOf(e.player) }
+            if (owned == e.sgtMint) e else e.copy(sgtMint = null)
+        }
+    }
 }
