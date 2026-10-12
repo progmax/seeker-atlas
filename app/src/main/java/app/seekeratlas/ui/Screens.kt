@@ -193,14 +193,16 @@ private fun PhotoView(photo: Photo, revealed: Boolean, modifier: Modifier) {
     }
     Box(modifier.background(Color.Black)) {
         Image(bitmap, contentDescription = "Where is this?", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        // The source page names the place, so the link only unlocks after the guess.
-        Text(
-            "© ${photo.author} · ${photo.license} · resized" + if (revealed) " · source ↗" else "",
-            color = Color.White, fontSize = 10.sp,
-            modifier = Modifier.align(Alignment.BottomEnd).background(Color(0x99000000))
-                .then(if (revealed) Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(photo.source))) } else Modifier)
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-        )
+        // Author and source page make the photo searchable, so credits appear with the answer.
+        if (revealed) {
+            Text(
+                "© ${photo.author} · ${photo.license} · resized · source ↗",
+                color = Color.White, fontSize = 10.sp,
+                modifier = Modifier.align(Alignment.BottomEnd).background(Color(0x99000000))
+                    .clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(photo.source))) }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+        }
     }
 }
 
