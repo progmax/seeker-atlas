@@ -55,4 +55,18 @@ class GeoTest {
         assertEquals(-90.0, p.lat, 1e-6)
         assertEquals(-180.0, p.lon, 1e-6)
     }
+
+    @Test fun hintUsesNamedContinentWhenItContainsThePoint() {
+        assertEquals("Asia", Region.hintFor(tbilisi, "Asia")?.name)
+        assertEquals("Europe", Region.hintFor(amsterdam, "Europe")?.name)
+    }
+
+    @Test fun hintFallsBackWhenContinentFieldIsMissingOrWrong() {
+        assertEquals("Europe", Region.hintFor(amsterdam, null)?.name)
+        assertEquals("Europe", Region.hintFor(amsterdam, "Oceania")?.name)
+    }
+
+    @Test fun everyContinentBoxIsWellFormed() {
+        Region.CONTINENTS.forEach { assertTrue(it.north > it.south && it.east > it.west) }
+    }
 }

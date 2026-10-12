@@ -10,13 +10,20 @@ class BoardTest {
 
     @Test fun memoRoundTrips() {
         val memo = Board.memo(day = 20_738, score = 12_750, player = player, sgtMint = sgt)
-        assertEquals("atlas1|20738|12750|$player|$sgt", memo)
+        assertEquals("atlas1|20738|12750|$player|$sgt|0", memo)
         assertEquals(BoardEntry(20_738, 12_750, player, sgt), Board.parse(memo))
     }
 
     @Test fun unverifiedPlayerUsesDash() {
         val memo = Board.memo(20_738, 100, player, null)
         assertEquals(BoardEntry(20_738, 100, player, null), Board.parse(memo))
+    }
+
+    @Test fun hintsAreRecordedAndOldFiveFieldMemosStillParse() {
+        val memo = Board.memo(20_738, 9000, player, null, hints = 2)
+        assertEquals(2, Board.parse(memo)?.hints)
+        assertEquals(0, Board.parse("atlas1|20738|9000|$player|-")?.hints)
+        assertNull(Board.parse("atlas1|20738|9000|$player|-|99"))
     }
 
     @Test fun parsesRpcMemoWithLengthPrefix() {

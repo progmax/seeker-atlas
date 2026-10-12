@@ -114,7 +114,7 @@ private fun WalletCard(vm: GameViewModel, sender: ActivityResultSender) {
     ) {
         val w = vm.wallet
         if (w == null) {
-            Text("Connect a wallet to seal your score on Solana and tip photographers in SKR.", color = Muted, fontSize = 14.sp)
+            Text("Connect a wallet to seal your score on Solana and buy hints with SKR.", color = Muted, fontSize = 14.sp)
             Button(onClick = { vm.connect(sender) }, colors = ButtonDefaults.buttonColors(containerColor = Violet)) {
                 Text("Connect wallet")
             }
@@ -144,26 +144,39 @@ private fun RoundScreen(vm: GameViewModel, sender: ActivityResultSender) {
             Text("${vm.total} pts", color = Mint, fontWeight = FontWeight.Bold)
         }
         PhotoView(photo, Modifier.fillMaxWidth().weight(1f))
-        WorldMap(
-            guess = result?.guess ?: vm.pendingGuess,
-            answer = if (result != null) photo.location else null,
-            onTap = vm::placeGuess,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        )
+        val hintRegion = if (vm.roundIndex in vm.hinted) photo.hintRegion else null
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            WorldMap(
+                guess = result?.guess ?: vm.pendingGuess,
+                answer = if (result != null) photo.location else null,
+                hint = if (result == null) hintRegion else null,
+                onTap = vm::placeGuess,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (hintRegion != null && result == null) {
+                Badge("💡 Somewhere in ${hintRegion.name}", Mint, Modifier.align(Alignment.TopStart).padding(8.dp))
+            }
+        }
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (result == null) {
-                PrimaryButton(if (vm.pendingGuess == null) "Tap the map to guess" else "Guess", enabled = vm.pendingGuess != null) {
-                    vm.submitGuess()
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val hintUsed = vm.roundIndex in vm.hinted
+                    OutlinedButton(
+                        onClick = { if (vm.wallet == null) vm.connect(sender) else vm.hint(sender) },
+                        enabled = !hintUsed,
+                        modifier = Modifier.height(54.dp),
+                    ) { Text(if (hintUsed) "💡 Used" else "💡 ${Config.HINT_SKR} SKR", color = if (hintUsed) Muted else Mint) }
+                    Box(Modifier.weight(1f)) {
+                        PrimaryButton(if (vm.pendingGuess == null) "Tap the map" else "Guess", enabled = vm.pendingGuess != null) {
+                            vm.submitGuess()
+                        }
+                    }
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("${photo.place}, ${photo.country}", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("${formatKm(result.distanceKm)} away · +${result.score}", color = Mint)
-                    }
-                    val tipped = photo.id in vm.tipped
-                    OutlinedButton(onClick = { vm.tip(sender, photo) }, enabled = !tipped && vm.wallet != null) {
-                        Text(if (tipped) "Tipped ✓" else "Tip ${Config.TIP_SKR} SKR", color = if (tipped) Muted else Mint)
+                        Text("${formatKm(result.distanceKm)} away · +${result.score}" + if (vm.roundIndex in vm.hinted) " · 💡" else "", color = Mint)
                     }
                 }
                 PrimaryButton(if (vm.roundIndex + 1 < vm.rounds.size) "Next place" else "See results") { vm.next() }
@@ -251,6 +264,7 @@ private fun BoardScreen(vm: GameViewModel) {
                 ) {
                     Text("${i + 1}", color = Muted, modifier = Modifier.padding(end = 12.dp))
                     Text(short(e.player) + if (mine) " (you)" else "", color = Color.White, modifier = Modifier.weight(1f))
+                    if (e.hints > 0) Text("💡${e.hints}", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp))
                     if (e.verified) Badge("Seeker", Mint)
                     Text("${e.score}", color = Mint, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 10.dp))
                 }
@@ -269,10 +283,10 @@ private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> 
 }
 
 @Composable
-private fun Badge(text: String, color: Color) {
+private fun Badge(text: String, color: Color, modifier: Modifier = Modifier) {
     Text(
         text, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(color.copy(alpha = 0.15f)).padding(horizontal = 8.dp, vertical = 3.dp),
+        modifier = modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xCC0B0F1A)).background(color.copy(alpha = 0.15f)).padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }
 

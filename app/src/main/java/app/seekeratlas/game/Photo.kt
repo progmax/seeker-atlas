@@ -2,6 +2,7 @@ package app.seekeratlas.game
 
 import android.content.Context
 import app.seekeratlas.geo.LatLon
+import app.seekeratlas.geo.Region
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -16,9 +17,10 @@ data class Photo(
     val author: String,
     val license: String,
     val source: String,
-    val wallet: String? = null,
+    val continent: String? = null,
 ) {
     val location: LatLon get() = LatLon(lat, lon)
+    val hintRegion: Region? get() = Region.hintFor(location, continent)
 }
 
 object Photos {

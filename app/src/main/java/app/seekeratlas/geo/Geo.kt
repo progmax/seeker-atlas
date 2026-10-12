@@ -42,3 +42,24 @@ object Projection {
         return LatLon(lat, lon)
     }
 }
+
+/** A lat/lon box; used for the paid continent hint. */
+data class Region(val name: String, val north: Double, val south: Double, val west: Double, val east: Double) {
+    fun contains(p: LatLon) = p.lat in south..north && p.lon in west..east
+
+    companion object {
+        val CONTINENTS = listOf(
+            Region("Europe", 72.0, 34.0, -25.0, 45.0),
+            Region("Asia", 78.0, -11.0, 25.0, 180.0),
+            Region("Africa", 38.0, -35.0, -18.0, 52.0),
+            Region("North America", 84.0, 7.0, -170.0, -52.0),
+            Region("South America", 13.0, -56.0, -82.0, -34.0),
+            Region("Oceania", 0.0, -48.0, 110.0, 180.0),
+            Region("Antarctica", -60.0, -90.0, -180.0, 180.0),
+        )
+
+        /** The named continent if it really contains the point, else the first continent box that does. */
+        fun hintFor(p: LatLon, continent: String?): Region? =
+            CONTINENTS.firstOrNull { it.name == continent && it.contains(p) } ?: CONTINENTS.firstOrNull { it.contains(p) }
+    }
+}

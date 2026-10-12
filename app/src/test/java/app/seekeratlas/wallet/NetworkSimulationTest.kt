@@ -28,4 +28,21 @@ class NetworkSimulationTest {
         println(sim["logs"])
         assertEquals(JsonNull, sim["err"])
     }
+
+    /** ATLAS_SKR_OWNERS = comma-separated SKR holders; at least one must hold >= 5 SKR in its ATA. */
+    @Test fun skrBurnSimulatesOnMainnet() = runBlocking {
+        assumeTrue(System.getenv("ATLAS_NETWORK_TESTS") == "1")
+        val owners = System.getenv("ATLAS_SKR_OWNERS").orEmpty().split(",").filter { it.isNotBlank() }
+        assumeTrue(owners.isNotEmpty())
+        val errors = owners.map { owner ->
+            val tx = Transactions.skrBurn(owner, 5, "atlas1-hint|20738|1", rpc.latestBlockhash())
+            val sim = rpc.call("simulateTransaction", buildJsonArray {
+                add(JsonPrimitive(Base64.getEncoder().encodeToString(tx)))
+                add(buildJsonObject { put("encoding", "base64"); put("sigVerify", false); put("replaceRecentBlockhash", true) })
+            }).jsonObject["value"]!!.jsonObject
+            println("$owner -> ${sim["err"]} ${sim["logs"]}")
+            sim["err"]
+        }
+        assert(errors.any { it == JsonNull }) { "no holder could burn: $errors" }
+    }
 }

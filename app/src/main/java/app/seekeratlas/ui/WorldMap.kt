@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import app.seekeratlas.geo.LatLon
 import app.seekeratlas.geo.Projection
+import app.seekeratlas.geo.Region
 import kotlin.math.roundToInt
 
 private val Ocean = Color(0xFF1B3554)
@@ -40,6 +41,7 @@ val Violet = Color(0xFF9945FF)
 fun WorldMap(
     guess: LatLon?,
     answer: LatLon?,
+    hint: Region?,
     onTap: (LatLon) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -54,7 +56,9 @@ fun WorldMap(
 
     fun mapWidth() = size.width.toFloat()
     fun mapHeight() = size.width / 2f
-    fun baseOffset() = Offset(0f, (size.height - mapHeight()) / 2f)
+    /** Smallest zoom: the map fills the view's height, so there's no empty ocean band. */
+    fun minScale() = maxOf(1f, size.height / mapHeight())
+    fun local(p: LatLon): Offset = Projection.toPoint(p, mapWidth(), mapHeight()).let { (x, y) -> Offset(x, y) }
     fun clamp(o: Offset, s: Float): Offset {
         val w = mapWidth() * s
         val h = mapHeight() * s
@@ -67,25 +71,40 @@ fun WorldMap(
         return offset + Offset(x, y) * scale
     }
 
-    // When the answer appears, zoom out so both pins are visible.
-    LaunchedEffect(answer) {
-        if (answer != null && size != IntSize.Zero) {
-            scale = 1f
-            offset = baseOffset()
+    /** Zooms so every point fits with some margin, centred on their bounding box. */
+    fun focusOn(points: List<Offset>) {
+        if (size == IntSize.Zero) return
+        val minX = points.minOf { it.x }; val maxX = points.maxOf { it.x }
+        val minY = points.minOf { it.y }; val maxY = points.maxOf { it.y }
+        val fit = minOf(size.width / ((maxX - minX) * 1.6f + 1f), size.height / ((maxY - minY) * 1.6f + 1f))
+        val s = fit.coerceIn(minScale(), 6f)
+        val center = Offset((minX + maxX) / 2f, (minY + maxY) / 2f)
+        scale = s
+        offset = clamp(Offset(size.width / 2f, size.height / 2f) - center * s, s)
+    }
+
+    fun reset() {
+        val s = minScale()
+        scale = s
+        offset = clamp(Offset((size.width - mapWidth() * s) / 2f, (size.height - mapHeight() * s) / 2f), s)
+    }
+
+    LaunchedEffect(answer, hint, size) {
+        when {
+            size == IntSize.Zero -> Unit
+            answer != null -> focusOn(listOfNotNull(guess, answer).map(::local))
+            hint != null -> focusOn(listOf(local(LatLon(hint.north, hint.west)), local(LatLon(hint.south, hint.east))))
+            else -> reset()
         }
     }
 
     Canvas(
         modifier
             .clipToBounds()
-            .onSizeChanged {
-                size = it
-                scale = 1f
-                offset = baseOffset()
-            }
+            .onSizeChanged { size = it }
             .pointerInput(Unit) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
-                    val newScale = (scale * zoom).coerceIn(1f, 10f)
+                    val newScale = (scale * zoom).coerceIn(minScale(), 12f)
                     val focus = (centroid - offset) / scale
                     offset = clamp(centroid - focus * newScale + pan, newScale)
                     scale = newScale
@@ -107,6 +126,12 @@ fun WorldMap(
             dstOffset = IntOffset(offset.x.roundToInt(), offset.y.roundToInt()),
             dstSize = IntSize((mapWidth() * scale).roundToInt(), (mapHeight() * scale).roundToInt()),
         )
+        hint?.let { r ->
+            val tl = toScreen(LatLon(r.north, r.west))
+            val br = toScreen(LatLon(r.south, r.east))
+            drawRect(Mint.copy(alpha = 0.18f), topLeft = tl, size = androidx.compose.ui.geometry.Size(br.x - tl.x, br.y - tl.y))
+            drawRect(Mint, topLeft = tl, size = androidx.compose.ui.geometry.Size(br.x - tl.x, br.y - tl.y), style = Stroke(3f))
+        }
         val g = guess?.let(::toScreen)
         val a = answer?.let(::toScreen)
         if (g != null && a != null) {

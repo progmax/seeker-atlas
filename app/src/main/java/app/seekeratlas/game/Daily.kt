@@ -4,8 +4,8 @@ import kotlin.random.Random
 
 object Daily {
     const val ROUNDS = 5
-    /** 2026-10-12, the day Seeker Atlas launched. */
-    const val LAUNCH_EPOCH_DAY = 20_738L
+    /** 2026-10-11 UTC, the day Seeker Atlas launched. */
+    const val LAUNCH_EPOCH_DAY = 20_737L
 
     /** Walks one fixed shuffle of the pool, five photos a day, so nothing repeats until the pool runs out. */
     fun pick(epochDay: Long, poolSize: Int): List<Int> {

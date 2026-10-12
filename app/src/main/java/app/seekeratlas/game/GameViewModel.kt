@@ -48,7 +48,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     var skrBalance by mutableStateOf<Double?>(null); private set
     var board by mutableStateOf<List<BoardEntry>>(emptyList()); private set
     var sealedSignature by mutableStateOf(prefs.getString("sealed_$epochDay", null)); private set
-    var tipped by mutableStateOf(prefs.getStringSet("tipped", emptySet())!!.toSet()); private set
+    /** Round indexes of today's puzzle where the player burned SKR for a hint. */
+    var hinted by mutableStateOf(loadHints()); private set
     var busy by mutableStateOf(false); private set
     private var boardJob: Job? = null
     var message by mutableStateOf<String?>(null)
@@ -72,6 +73,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         roundIndex = 0
         pendingGuess = null
         sealedSignature = prefs.getString("sealed_$now", null)
+        hinted = loadHints()
         board = emptyList()
         screen = Screen.Home
     }
@@ -130,17 +132,23 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun tip(sender: ActivityResultSender, photo: Photo) = launchBusy {
-        val from = wallet ?: return@launchBusy run { message = "Connect a wallet first" }
-        val to = photo.wallet ?: Config.TREASURY_ADDRESS
-        val tx = Transactions.skrTip(from, to, Config.TIP_SKR, rpc.latestBlockhash())
+    /** Burns SKR and reveals the continent of the current photo. Counted on the leaderboard. */
+    fun hint(sender: ActivityResultSender) = launchBusy {
+        if (revealed || roundIndex in hinted) return@launchBusy
+        val player = wallet ?: return@launchBusy run { message = "Connect a wallet to buy hints with SKR" }
+        val balance = skrBalance
+        if (balance != null && balance < Config.HINT_SKR) {
+            return@launchBusy run { message = "You need ${Config.HINT_SKR} SKR for a hint (you have %.2f)".format(balance) }
+        }
+        val round = roundIndex
+        val memo = "atlas1-hint|$epochDay|${round + 1}"
+        val tx = Transactions.skrBurn(player, Config.HINT_SKR, memo, rpc.latestBlockhash())
         when (val r = connector.signAndSend(sender, tx)) {
             is WalletResult.Ok -> {
                 if (!confirmed(r.value)) return@launchBusy
-                tipped = tipped + photo.id
-                prefs.edit().putStringSet("tipped", tipped).apply()
-                message = "Sent ${Config.TIP_SKR} SKR to ${if (photo.wallet != null) "the photographer" else "the Atlas photo fund"}"
-                refreshWallet(from)
+                hinted = hinted + round
+                prefs.edit().putLong("hint_day", epochDay).putStringSet("hints", hinted.map { it.toString() }.toSet()).apply()
+                refreshWallet(player)
             }
             is WalletResult.Error -> message = r.message
         }
@@ -148,7 +156,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun seal(sender: ActivityResultSender) = launchBusy {
         val player = wallet ?: return@launchBusy run { message = "Connect a wallet first" }
-        val memo = Board.memo(epochDay, total, player, genesisMint)
+        val memo = Board.memo(epochDay, total, player, genesisMint, hinted.size)
         val tx = Transactions.scoreMemo(player, memo, rpc.latestBlockhash())
         when (val r = connector.signAndSend(sender, tx)) {
             is WalletResult.Ok -> {
@@ -178,7 +186,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
             .onSuccess { entries ->
-                val mine = sealedSignature?.let { wallet?.let { w -> BoardEntry(epochDay, total, w, genesisMint) } }
+                val mine = sealedSignature?.let { wallet?.let { w -> BoardEntry(epochDay, total, w, genesisMint, hinted.size) } }
                 board = Board.rank(entries + listOfNotNull(mine), epochDay)
             }
             .onFailure { message = "Leaderboard unavailable: ${it.message}" }
@@ -217,6 +225,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 RoundResult(g, d, Geo.score(d))
             }
     }
+
+    private fun loadHints(): Set<Int> =
+        if (prefs.getLong("hint_day", -1) != epochDay) emptySet()
+        else prefs.getStringSet("hints", emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }.toSet()
 
     private fun saveResults() {
         prefs.edit()
