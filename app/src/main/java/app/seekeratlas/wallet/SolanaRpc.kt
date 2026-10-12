@@ -59,9 +59,16 @@ class SolanaRpc(private val url: String = Config.RPC_URL) {
         json["result"] ?: throw RpcException("empty result")
     }
 
-    suspend fun latestBlockhash(): String =
-        call("getLatestBlockhash", buildJsonArray { add(buildJsonObject { put("commitment", "finalized") }) })
-            .jsonObject["value"]!!.jsonObject["blockhash"]!!.jsonPrimitive.content
+    data class Blockhash(val hash: String, val slot: Long)
+
+    /** Blockhash plus the slot it was read at; Phantom requires that slot as minContextSlot. */
+    suspend fun latestBlockhash(): Blockhash {
+        val r = call("getLatestBlockhash", buildJsonArray { add(buildJsonObject { put("commitment", "confirmed") }) }).jsonObject
+        return Blockhash(
+            hash = r["value"]!!.jsonObject["blockhash"]!!.jsonPrimitive.content,
+            slot = r["context"]!!.jsonObject["slot"]!!.jsonPrimitive.content.toLong(),
+        )
+    }
 
     /** Balance of the SKR associated token account — the account tips and burns are paid from. */
     suspend fun skrBalance(owner: String): Double {

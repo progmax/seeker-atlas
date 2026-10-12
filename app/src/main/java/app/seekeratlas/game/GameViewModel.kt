@@ -158,8 +158,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
         val round = roundIndex
         val memo = "atlas1-hint|$epochDay|${round + 1}"
-        val tx = Transactions.skrBurn(player, Config.HINT_SKR, memo, rpc.latestBlockhash())
-        when (val r = connector.signAndSend(sender, tx)) {
+        val bh = rpc.latestBlockhash()
+        val tx = Transactions.skrBurn(player, Config.HINT_SKR, memo, bh.hash)
+        when (val r = connector.signAndSend(sender, tx, bh.slot)) {
             is WalletResult.Ok -> {
                 if (!confirmed(r.value)) return@launchBusy
                 hinted = hinted + round
@@ -173,8 +174,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun seal(sender: ActivityResultSender) = launchBusy {
         val player = wallet ?: return@launchBusy run { message = "Connect a wallet first" }
         val memo = Board.memo(epochDay, total, player, genesisMint, hinted.size)
-        val tx = Transactions.scoreMemo(player, memo, rpc.latestBlockhash())
-        when (val r = connector.signAndSend(sender, tx)) {
+        val bh = rpc.latestBlockhash()
+        val tx = Transactions.scoreMemo(player, memo, bh.hash)
+        when (val r = connector.signAndSend(sender, tx, bh.slot)) {
             is WalletResult.Ok -> {
                 if (!confirmed(r.value)) return@launchBusy
                 sealedSignature = r.value

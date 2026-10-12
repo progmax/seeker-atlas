@@ -20,7 +20,7 @@ class NetworkSimulationTest {
     @Test fun scoreMemoSimulatesOnMainnet() = runBlocking {
         assumeTrue(System.getenv("ATLAS_NETWORK_TESTS") == "1")
         val memo = Board.memo(20_738, 12_345, funded, null)
-        val tx = Transactions.scoreMemo(funded, memo, rpc.latestBlockhash())
+        val tx = Transactions.scoreMemo(funded, memo, rpc.latestBlockhash().hash)
         val sim = rpc.call("simulateTransaction", buildJsonArray {
             add(JsonPrimitive(Base64.getEncoder().encodeToString(tx)))
             add(buildJsonObject { put("encoding", "base64"); put("sigVerify", false); put("replaceRecentBlockhash", true) })
@@ -35,7 +35,7 @@ class NetworkSimulationTest {
         val owners = System.getenv("ATLAS_SKR_OWNERS").orEmpty().split(",").filter { it.isNotBlank() }
         assumeTrue(owners.isNotEmpty())
         val errors = owners.map { owner ->
-            val tx = Transactions.skrBurn(owner, 5, "atlas1-hint|20738|1", rpc.latestBlockhash())
+            val tx = Transactions.skrBurn(owner, 5, "atlas1-hint|20738|1", rpc.latestBlockhash().hash)
             val sim = rpc.call("simulateTransaction", buildJsonArray {
                 add(JsonPrimitive(Base64.getEncoder().encodeToString(tx)))
                 add(buildJsonObject { put("encoding", "base64"); put("sigVerify", false); put("replaceRecentBlockhash", true) })

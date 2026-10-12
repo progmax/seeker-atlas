@@ -5,6 +5,7 @@ import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
 import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
 import com.solana.mobilewalletadapter.clientlib.Solana
+import com.solana.mobilewalletadapter.clientlib.TransactionParams
 import com.solana.mobilewalletadapter.clientlib.TransactionResult
 import org.sol4k.Base58
 
@@ -17,8 +18,8 @@ sealed interface WalletResult<out T> {
 class WalletConnector {
     private val adapter = MobileWalletAdapter(
         ConnectionIdentity(
-            identityUri = Uri.parse("https://seekeratlas.app"),
-            iconUri = Uri.parse("favicon.ico"),
+            identityUri = Uri.parse("https://progmax.github.io"),
+            iconUri = Uri.parse("icon.png"),
             identityName = "Seeker Atlas",
         ),
         // The player may read the transaction in the wallet for a while; the library default is too short.
@@ -36,8 +37,16 @@ class WalletConnector {
             is TransactionResult.Failure -> WalletResult.Error(r.message)
         }
 
-    suspend fun signAndSend(sender: ActivityResultSender, tx: ByteArray): WalletResult<String> {
-        val r = withFreshAuthOnFailure { adapter.transact(sender) { signAndSendTransactions(arrayOf(tx)) } }
+    /** [minContextSlot] is mandatory for Phantom: without it the wallet silently drops the request. */
+    suspend fun signAndSend(sender: ActivityResultSender, tx: ByteArray, minContextSlot: Long): WalletResult<String> {
+        val params = TransactionParams(
+            minContextSlot = minContextSlot.toInt(),
+            commitment = "confirmed",
+            skipPreflight = false,
+            maxRetries = null,
+            waitForCommitmentToSendNextTransaction = false,
+        )
+        val r = withFreshAuthOnFailure { adapter.transact(sender) { signAndSendTransactions(arrayOf(tx), params) } }
         return when (r) {
             is TransactionResult.Success -> WalletResult.Ok(Base58.encode(r.payload.signatures.first()))
             is TransactionResult.NoWalletFound -> WalletResult.Error("No Solana wallet found.")
